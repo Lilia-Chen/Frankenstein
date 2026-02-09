@@ -1,0 +1,19 @@
+{
+  "name": "@moeru/three-mmd-r3f",
+  "type": "module",
+  "version": "0.1.0-beta.1",
+  "private": true,
+  "description": "Use MMD on React-three-fiber",
+  "exports": "./src/index.ts",
+  "peerDependencies": {
+    "@react-three/fiber": "^9.3.0",
+    "@types/react": "^19.1.11",
+    "@types/three": "^0.179.0",
+    "react": "^19.1.1",
+    "three": "^0.179.0"
+  },
+  "dependencies": {
+    "@moeru/three-mmd": "^0.1.0-beta.1",
+    "suspend-react": "catalog:r3f"
+  }
+}

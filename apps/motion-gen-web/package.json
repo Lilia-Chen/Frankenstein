@@ -1,0 +1,31 @@
+{
+  "name": "motion-gen-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5173",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@moeru/three-mmd": "^0.1.0-beta.1",
+    "@moeru/three-mmd-physics-ammo": "^0.1.0-beta.1",
+    "@moeru/three-mmd-r3f": "workspace:^",
+    "@react-three/drei": "catalog:r3f",
+    "@react-three/fiber": "catalog:r3f",
+    "leva": "^0.10.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.1",
+    "@types/three": "^0.180.0",
+    "@vitejs/plugin-react": "^5.0.4",
+    "typescript": "~5.9.3",
+    "vite": "^7.1.9"
+  }
+}

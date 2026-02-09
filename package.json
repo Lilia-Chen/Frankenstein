@@ -1,0 +1,15 @@
+{
+  "name": "frankenstein-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "dev": "pnpm --filter motion-gen-web dev",
+    "build": "pnpm --filter motion-gen-web build",
+    "lint": "pnpm --filter motion-gen-web lint"
+  },
+  "dependencies": {
+    "@moeru/three-mmd": "^0.1.0-beta.1",
+    "three": "^0.182.0"
+  }
+}
