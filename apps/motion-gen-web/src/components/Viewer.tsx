@@ -3,7 +3,7 @@ import { useMMD, useMMDPhysics } from '@moeru/three-mmd-r3f'
 import { useControls } from 'leva'
 import { useEffect, useState } from 'react'
 
-import pmxUrl from '../../public/assets/げのげ式初音ミク/げのげ式初音ミク.pmx?url'
+import pmxUrl from '../../public/assets/Endmin(B.)配布用/Endmin(.B)_v1.0.pmx?url'
 
 const Viewer = () => {
   const [editingScale, setEditingScale] = useState(false)

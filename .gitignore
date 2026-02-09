@@ -3,3 +3,6 @@ dist
 .DS_Store
 *.log
 
+# Local MMD assets (avoid committing models/textures)
+apps/motion-gen-web/public/assets/
+!apps/motion-gen-web/public/assets/README.md
