@@ -8,7 +8,20 @@
       "WebFetch(domain:github.com)",
       "Bash(pnpm --filter motion-gen-web lint:*)",
       "Bash(pnpm --filter motion-gen-web build:*)",
-      "Bash(pnpm --filter motion-gen-web test)"
+      "Bash(pnpm --filter motion-gen-web test)",
+      "WebFetch(domain:arxiv.org)",
+      "WebFetch(domain:www.frontiersin.org)",
+      "WebFetch(domain:www.sciencedirect.com)",
+      "WebFetch(domain:pmc.ncbi.nlm.nih.gov)",
+      "WebFetch(domain:www.ias.informatik.tu-darmstadt.de)",
+      "WebFetch(domain:pure.tudelft.nl)",
+      "WebFetch(domain:proceedings.neurips.cc)",
+      "WebFetch(domain:www.researchgate.net)",
+      "WebFetch(domain:dfki-ric.github.io)",
+      "WebFetch(domain:journals.sagepub.com)",
+      "WebFetch(domain:www.emergentmind.com)",
+      "WebFetch(domain:www.scribd.com)",
+      "WebFetch(domain:studywolf.wordpress.com)"
     ]
   }
 }
