@@ -1,5 +1,7 @@
 import type {
   CancelRequest,
+  CurrentFrameRequest,
+  DoneMessage,
   FrameMessage,
   GenerateRequest,
   MotionSocketServerMessage,
@@ -11,6 +13,7 @@ type MotionWebSocketClientOptions = {
   url: string
   onStatusChange?: (status: WsClientStatus) => void
   onFrame?: (message: FrameMessage) => void
+  onDone?: (message: DoneMessage) => void
   onError?: (message: string) => void
 }
 
@@ -46,6 +49,8 @@ export class MotionWebSocketClient {
         const payload = JSON.parse(event.data) as MotionSocketServerMessage
         if (payload.type === 'frame') {
           this.options.onFrame?.(payload)
+        } else if (payload.type === 'done') {
+          this.options.onDone?.(payload)
         } else if (payload.type === 'error') {
           this.options.onError?.(payload.error)
         }
@@ -64,13 +69,17 @@ export class MotionWebSocketClient {
     this.send(req)
   }
 
+  sendCurrentFrame(req: CurrentFrameRequest) {
+    this.send(req)
+  }
+
   close() {
     if (!this.socket) return
     this.socket.close()
     this.socket = null
   }
 
-  private send(payload: GenerateRequest | CancelRequest) {
+  private send(payload: GenerateRequest | CancelRequest | CurrentFrameRequest) {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
       this.options.onError?.('WebSocket is not connected.')
       return
@@ -82,4 +91,3 @@ export class MotionWebSocketClient {
     this.options.onStatusChange?.(status)
   }
 }
-

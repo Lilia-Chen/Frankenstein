@@ -37,12 +37,19 @@ export interface GenerateRequest {
     text_prompt: string
     duration_seconds?: number
     fps?: number
+    current_frame?: MotionFrame
   }
 }
 
 export interface CancelRequest {
   type: 'cancel'
   id: string
+}
+
+export interface CurrentFrameRequest {
+  type: 'current_frame'
+  id: string
+  frame: MotionFrame
 }
 
 export interface FrameMessage {
