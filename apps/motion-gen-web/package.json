@@ -7,17 +7,15 @@
     "dev": "vite --port 5173",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "vitest --run",
+    "test:watch": "vitest"
   },
   "dependencies": {
-    "@moeru/three-mmd": "^0.1.0-beta.1",
-    "@moeru/three-mmd-physics-ammo": "^0.1.0-beta.1",
-    "@moeru/three-mmd-r3f": "workspace:^",
-    "@react-three/postprocessing": "^3.0.0",
+    "@pixiv/three-vrm": "^3.4.4",
     "@react-three/drei": "catalog:r3f",
     "@react-three/fiber": "catalog:r3f",
     "leva": "^0.10.0",
-    "postprocessing": "^6.37.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "three": "^0.180.0"
@@ -28,6 +26,8 @@
     "@types/three": "^0.180.0",
     "@vitejs/plugin-react": "^5.0.4",
     "typescript": "~5.9.3",
-    "vite": "^7.1.9"
+    "vite": "^7.1.9",
+    "vitest": "^3.1.4",
+    "happy-dom": "^18.0.1"
   }
 }

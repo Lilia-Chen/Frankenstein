@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:pmndrs.github.io)",
+      "WebFetch(domain:pixiv.github.io)",
+      "Bash(pnpm install:*)",
+      "Bash(curl:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(pnpm --filter motion-gen-web lint:*)",
+      "Bash(pnpm --filter motion-gen-web build:*)",
+      "Bash(pnpm --filter motion-gen-web test)"
+    ]
+  }
+}

@@ -1,3 +1,25 @@
+// ── Core data types ──
+
+export type QuaternionTuple = [x: number, y: number, z: number, w: number]
+
+export interface MotionFrame {
+  timestamp: number
+
+  // Root (world space)
+  root_position: [number, number, number]
+  root_rotation: QuaternionTuple
+
+  // Joint rotations (local space, relative to parent bone)
+  // Standard joint names use SMPL-X naming (pelvis, spine1, spine2, ...)
+  joint_rotations: Partial<Record<JointName, QuaternionTuple>>
+
+  // Optional: joint world positions (for Layer 4 spatial queries)
+  joint_positions?: Partial<Record<JointName, [number, number, number]>>
+
+  // Optional: velocity info (for until-condition evaluation and guidance)
+  root_velocity?: [number, number, number]
+}
+
 export type JointName =
   | 'pelvis'
   | 'spine1'
@@ -22,19 +44,46 @@ export type JointName =
   | 'right_elbow'
   | 'right_wrist'
 
-export interface MotionFrame {
-  index: number
-  timestamp: number
-  root_translation: [number, number, number]
-  root_rotation: [number, number, number, number]
-  joint_rotations: Record<JointName, [number, number, number, number]>
+// ── ConditioningSpec (Layer 2 → Layer 3) ──
+
+export interface ConditioningSpec {
+  text?: string
+
+  spatial?: {
+    target_position?: [number, number, number]
+    target_facing?: [number, number, number]
+    waypoints?: [number, number, number][]
+  }
+
+  trajectory?: {
+    joint_targets?: Record<string, [number, number, number]>
+    velocity?: [number, number, number]
+  }
+
+  transition?: {
+    from_skill?: string
+    to_skill?: string
+    blend_duration?: number
+    intermediate_waypoints?: [number, number, number][]
+  }
 }
+
+// ── Generator capabilities handshake ──
+
+export interface GeneratorCapabilities {
+  supportsText: boolean
+  supportsSpatial: boolean
+  supportsTrajectory: boolean
+  supportsTransition: boolean
+}
+
+// ── WebSocket message types ──
 
 export interface GenerateRequest {
   type: 'generate'
   id: string
   payload: {
-    text_prompt: string
+    conditioning: ConditioningSpec
     duration_seconds?: number
     fps?: number
     current_frame?: MotionFrame
@@ -44,12 +93,6 @@ export interface GenerateRequest {
 export interface CancelRequest {
   type: 'cancel'
   id: string
-}
-
-export interface CurrentFrameRequest {
-  type: 'current_frame'
-  id: string
-  frame: MotionFrame
 }
 
 export interface FrameMessage {
@@ -74,5 +117,9 @@ export interface ErrorMessage {
   error: string
 }
 
-export type MotionSocketServerMessage = FrameMessage | DoneMessage | ErrorMessage
+export interface HandshakeMessage {
+  type: 'handshake'
+  capabilities: GeneratorCapabilities
+}
 
+export type ServerMessage = FrameMessage | DoneMessage | ErrorMessage | HandshakeMessage

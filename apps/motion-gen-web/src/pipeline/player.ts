@@ -5,6 +5,14 @@ export class MotionPlayer {
   private startWallTimeMs: number | null = null
   private running = false
 
+  get frameCount(): number {
+    return this.frames.length
+  }
+
+  get isRunning(): boolean {
+    return this.running
+  }
+
   start() {
     this.running = true
     if (this.startWallTimeMs === null) {
@@ -41,4 +49,3 @@ export class MotionPlayer {
     return latest ?? this.frames[0]
   }
 }
-

@@ -1,32 +1,61 @@
 # Frankenstein Monorepo Agents Guide
 
-This repo is a small pnpm monorepo. The primary app is the Vite + React front end in `apps/motion-gen-web`.
+pnpm monorepo，主应用是 `apps/motion-gen-web`（Vite + React + Three.js）。
 
 ## Quick Commands
-1. `pnpm dev` (from repo root) runs the front end.
-2. `pnpm build` (from repo root) builds the front end.
-3. `pnpm lint` (from repo root) lints the front end.
+
+- `pnpm dev` — 启动前端开发服务器（port 5173）
+- `pnpm build` — TypeScript 检查 + 生产构建
+- `pnpm lint` — TypeScript 类型检查
+- `pnpm --filter motion-gen-web test` — 运行单元测试
+- `pnpm --filter motion-gen-web test:watch` — 测试 watch 模式
 
 ## Front End Architecture
-1. Main app entry: `apps/motion-gen-web/src/App.tsx`.
-2. MMD viewer: `apps/motion-gen-web/src/components/Viewer.tsx`.
-3. Motion streaming: `apps/motion-gen-web/src/motion/ws-client.ts`.
-4. Motion playback buffering: `apps/motion-gen-web/src/motion/player.ts`.
-5. Motion-to-bone adapter: `apps/motion-gen-web/src/motion/adapter.ts`.
-6. WebSocket/frames typing: `apps/motion-gen-web/src/types/motion.ts`.
-7. Overlay UI styling: `apps/motion-gen-web/src/styles.css`.
+
+详细架构文档见 `doc/architecture/frontend.md`。
+
+关键文件：
+
+| 职责 | 文件 |
+|------|------|
+| 入口 | `apps/motion-gen-web/src/App.tsx` |
+| VRM 渲染 | `apps/motion-gen-web/src/components/VrmViewer.tsx` |
+| 3D 场景 | `apps/motion-gen-web/src/components/Scene.tsx` |
+| UI 面板 | `apps/motion-gen-web/src/components/ControlPanel.tsx` |
+| 骨骼驱动 | `apps/motion-gen-web/src/pipeline/adapter.ts` |
+| 帧回放 | `apps/motion-gen-web/src/pipeline/player.ts` |
+| WebSocket 数据源 | `apps/motion-gen-web/src/pipeline/sources/websocket-source.ts` |
+| Mocap 数据源 | `apps/motion-gen-web/src/pipeline/sources/mocap-source.ts` |
+| 数据源接口 | `apps/motion-gen-web/src/pipeline/sources/types.ts` |
+| 核心类型 | `apps/motion-gen-web/src/types/motion.ts` |
+| 骨骼映射 | `apps/motion-gen-web/src/types/vrm.ts` |
+| VRM 加载 hook | `apps/motion-gen-web/src/hooks/use-vrm.ts` |
+| Pipeline 编排 hook | `apps/motion-gen-web/src/hooks/use-motion-pipeline.ts` |
 
 ## Motion Streaming Contract
-1. WebSocket default URL: `ws://localhost:8000/ws/motion`.
-2. Frames are streamed in order; each frame includes root translation + rotation and 22 joint quaternions.
-3. Coordinate system: Y-up (Three.js standard). Units are meters.
-4. Root bone in MMD is mapped to `センター` in the adapter.
+
+- WebSocket 默认 URL：`ws://localhost:8000/ws/motion`
+- 客户端发送 `GenerateRequest`，payload 包含 `ConditioningSpec`（多模态指令）+ duration + fps
+- 服务端流式返回 `FrameMessage`，每帧包含 root position/rotation + 22 joint quaternions
+- 坐标系：Y-up 右手系（Three.js 标准），单位米
+- Quaternion 格式：xyzw
+- 模型格式：VRM 1.0，骨骼通过 SMPL-X → VRM humanoid 映射驱动
+
+## Testing
+
+- 框架：Vitest + happy-dom
+- 测试文件与源码 co-located（`.test.ts` 后缀）
+- 覆盖：pipeline 层全覆盖（player、adapter、websocket-source、mocap-source）
 
 ## Common Tasks
-1. If motion looks wrong, check `apps/motion-gen-web/src/motion/adapter.ts`.
-2. If playback timing is off, check `apps/motion-gen-web/src/motion/player.ts`.
-3. If connection issues occur, check `apps/motion-gen-web/src/motion/ws-client.ts`.
+
+- 动作显示异常 → 检查 `pipeline/adapter.ts`（骨骼映射和 quaternion 稳定化）
+- 回放时序问题 → 检查 `pipeline/player.ts`（帧缓冲和时间计算）
+- 连接问题 → 检查 `pipeline/sources/websocket-source.ts`
+- VRM 模型加载问题 → 检查 `hooks/use-vrm.ts`
 
 ## Style Expectations
-1. Keep UI changes minimal and functional; use the existing panel styles in `apps/motion-gen-web/src/styles.css`.
-2. Prefer small, focused components to avoid re-rendering the Three.js canvas.
+
+- UI 使用 `styles.css` 中的 `.control-panel__*` BEM 类名
+- 组件保持小而聚焦，避免不必要的 Canvas 重渲染
+- 3D 相关逻辑放 `pipeline/` 和 `hooks/`，UI 逻辑放 `components/`
