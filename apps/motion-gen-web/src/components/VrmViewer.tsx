@@ -15,8 +15,10 @@ export default function VrmViewer({ modelUrl, player }: VrmViewerProps) {
   const vrm = useVRM(modelUrl)
   const boneMap = useMemo(() => createVrmBoneMap(vrm), [vrm])
 
-  const { showSkeleton } = useControls('VRM Debug', {
+  const { showSkeleton, showAxes, axesSize } = useControls('VRM Debug', {
     showSkeleton: false,
+    showAxes: true,
+    axesSize: { value: 1, min: 0.1, max: 5, step: 0.1 },
   })
 
   const skeletonHelper = useMemo(() => {
@@ -35,6 +37,7 @@ export default function VrmViewer({ modelUrl, player }: VrmViewerProps) {
     <>
       <primitive object={vrm.scene} />
       {showSkeleton && <primitive object={skeletonHelper} />}
+      {showAxes && <axesHelper args={[axesSize]} />}
     </>
   )
 }

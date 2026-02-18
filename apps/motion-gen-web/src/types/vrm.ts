@@ -4,8 +4,10 @@ import type { JointName } from './motion'
 /**
  * SMPL-X 22 joints → VRM humanoid bone mapping.
  *
- * Coordinate systems are aligned (Y-up right-handed), so quaternions
- * transfer directly without axis flipping.
+ * SMPL-X uses Z-up (X-right Y-forward Z-up), VRM uses Y-up.
+ * Adapter handles the conversion: root premultiply R = Ry(180°)·Rx(-90°),
+ * joint locals pass through unchanged. pelvis is excluded from joints
+ * (handled as root).
  *
  * Note: VRM chest / upperChest are optional bones — adapter must handle null.
  */

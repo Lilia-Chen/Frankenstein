@@ -88,7 +88,12 @@ Three.js 渲染
 
 SMPL-X 22 关节 → VRM humanoid bone，定义在 `types/vrm.ts` 的 `SMPLX_TO_VRM` 常量中。
 
-两个坐标系一致（Y-up 右手系），quaternion 直接传递，不需要轴翻转。
+SMPL-X 使用 Z-up 右手系（X-right Y-forward Z-up），VRM/Three.js 使用 Y-up 右手系。adapter 负责坐标变换：
+
+- position: `[x, y, z] → [-x, z, y]`
+- root rotation: premultiply `R = Ry(180°) · Rx(-90°)`（不是 conjugation）
+- joint local rotations: 直接透传，不做变换（FK 证明世界旋转下局部旋转不变）
+- pelvis 从 joints map 中排除，避免覆盖 root rotation
 
 VRM 的 chest / upperChest 是 optional bone，adapter 中 `createVrmBoneMap()` 会跳过返回 null 的骨骼。
 

@@ -74,7 +74,7 @@ right_collar, right_shoulder, right_elbow, right_wrist
 
 `joint_rotations` 是 partial 的，不要求每帧包含全部 22 个关节，缺失的关节前端会保持上一帧的值。
 
-坐标系：Y-up 右手系，与 VRM/Three.js 一致，四元数直接传递不需要轴翻转。
+坐标系：Z-up 右手系（SMPL-X 原生坐标系，X-right Y-forward Z-up）。前端 adapter 负责 Z-up → Y-up 变换：position `[x,y,z]→[-x,z,y]`；root rotation 做 `R·q` premultiply（R = Ry(180°)·Rx(-90°)）；joint local rotations 直接透传不变。
 
 ### 3. done — 生成完成
 

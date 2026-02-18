@@ -21,7 +21,13 @@
       "WebFetch(domain:journals.sagepub.com)",
       "WebFetch(domain:www.emergentmind.com)",
       "WebFetch(domain:www.scribd.com)",
-      "WebFetch(domain:studywolf.wordpress.com)"
+      "WebFetch(domain:studywolf.wordpress.com)",
+      "Bash(pnpm --filter motion-gen-web test:*)",
+      "WebFetch(domain:download.is.tue.mpg.de)",
+      "WebSearch",
+      "WebFetch(domain:khanhha.github.io)",
+      "Bash(npx vitest run:*)",
+      "WebFetch(domain:gamedev.stackexchange.com)"
     ]
   }
 }

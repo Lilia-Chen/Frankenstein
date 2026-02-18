@@ -366,8 +366,8 @@ interface MotionFrame {
 
 不同 Generator 的 adapter 负责把模型原生输出转换为 MotionFrame：
 
-- PRIMAL: SMPL-X 267-dim → MotionFrame（axis-angle → quaternion）
-- DART: latent → decoded motion → MotionFrame
+- PRIMAL: SMPL-X 267-dim → MotionFrame（axis-angle → quaternion，Z-up 原生坐标系，前端 adapter 负责转 Y-up）
+- DART: latent → decoded motion → MotionFrame（同上，Z-up）
 - FloodDiffusion: HumanML3D 263-dim → MotionFrame（需要 IK 或直接用 joint positions）
 - Mocap playback: BVH/clip → MotionFrame
 

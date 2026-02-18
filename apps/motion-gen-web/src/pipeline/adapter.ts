@@ -1,5 +1,5 @@
 import type { VRM } from '@pixiv/three-vrm'
-import { Object3D, Quaternion } from 'three'
+import { Euler, Object3D, Quaternion } from 'three'
 import type { JointName, MotionFrame, QuaternionTuple } from '../types/motion'
 import { SMPLX_TO_VRM } from '../types/vrm'
 
@@ -16,6 +16,7 @@ export function createVrmBoneMap(vrm: VRM): VrmBoneMap {
   const joints: Partial<Record<JointName, Object3D>> = {}
 
   for (const [joint, vrmBone] of Object.entries(SMPLX_TO_VRM)) {
+    if (joint === 'pelvis') continue // root is handled separately
     const node = vrm.humanoid.getNormalizedBoneNode(vrmBone)
     if (node) {
       joints[joint as JointName] = node
@@ -28,14 +29,13 @@ export function createVrmBoneMap(vrm: VRM): VrmBoneMap {
   }
 }
 
-// Reusable quaternion to avoid per-frame allocation
+// ── Reusable temporaries ──
 const _q = new Quaternion()
+const _r = new Quaternion()
 const _prev = new Map<Object3D, Quaternion>()
 
 /**
  * Stabilize quaternion to prevent sign-flip discontinuities.
- * If the new quaternion is in the opposite hemisphere from the previous one,
- * negate it (they represent the same rotation).
  */
 function stabilize(node: Object3D, x: number, y: number, z: number, w: number): Quaternion {
   _q.set(x, y, z, w)
@@ -48,28 +48,43 @@ function stabilize(node: Object3D, x: number, y: number, z: number, w: number): 
 }
 
 /**
+ * World-space rotation fix: Rx(-90°) then Ry(180°).
+ *
+ * R = Ry(180°) * Rx(-90°)  (quaternion: [0, √2/2, √2/2, 0])
+ *
+ * Position:  [x, y, z] → [-x, z, y]
+ * Root rot:  q' = R * q   (premultiply — NOT conjugation)
+ * Joint rot: unchanged    (FK proves locals are invariant under world rotation)
+ */
+const _R = new Quaternion()
+  .setFromEuler(new Euler(-Math.PI / 2, 0, 0, 'XYZ'))
+  .premultiply(new Quaternion().setFromEuler(new Euler(0, Math.PI, 0, 'XYZ')))
+
+/**
  * Apply a MotionFrame to VRM skeleton.
- * Root gets world-space position + rotation; joints get local quaternion rotations.
  */
 export function applyMotionFrameToVrm(frame: MotionFrame, boneMap: VrmBoneMap): void {
-  // Root position + rotation
+  // Root: apply world rotation R
   if (boneMap.root) {
     const [px, py, pz] = frame.root_position
-    boneMap.root.position.set(px, py, pz)
+    boneMap.root.position.set(-px, pz, py)
 
     const [rx, ry, rz, rw] = frame.root_rotation
-    const rq = stabilize(boneMap.root, rx, ry, rz, rw)
-    boneMap.root.quaternion.copy(rq)
+    _r.set(rx, ry, rz, rw)
+    _r.premultiply(_R) // q' = R * q
+    const sq = stabilize(boneMap.root, _r.x, _r.y, _r.z, _r.w)
+    boneMap.root.quaternion.copy(sq)
   }
 
-  // Joint local rotations
+  // Joints: pass through unchanged (pelvis excluded from map)
   for (const [joint, quat] of Object.entries(frame.joint_rotations)) {
+    if (joint === 'pelvis') continue
     const node = boneMap.joints[joint as JointName]
     if (!node || !quat) continue
 
-    const [x, y, z, w] = quat as QuaternionTuple
-    const q = stabilize(node, x, y, z, w)
-    node.quaternion.copy(q)
+    const [jx, jy, jz, jw] = quat as QuaternionTuple
+    const sq = stabilize(node, jx, jy, jz, jw)
+    node.quaternion.copy(sq)
   }
 }
 

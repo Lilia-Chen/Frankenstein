@@ -37,7 +37,7 @@ pnpm monorepo，主应用是 `apps/motion-gen-web`（Vite + React + Three.js）�
 - WebSocket 默认 URL：`ws://localhost:8000/ws/motion`
 - 客户端发送 `GenerateRequest`，payload 包含 `ConditioningSpec`（多模态指令）+ duration + fps
 - 服务端流式返回 `FrameMessage`，每帧包含 root position/rotation + 22 joint quaternions
-- 坐标系：Y-up 右手系（Three.js 标准），单位米
+- 坐标系：后端发送 Z-up 右手系（SMPL-X 原生），前端 adapter 转换为 Y-up（Three.js 标准），单位米
 - Quaternion 格式：xyzw
 - 模型格式：VRM 1.0，骨骼通过 SMPL-X → VRM humanoid 映射驱动
 

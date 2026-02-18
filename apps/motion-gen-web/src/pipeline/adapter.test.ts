@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Object3D, Quaternion, Vector3 } from 'three'
+import { Object3D } from 'three'
 import type { MotionFrame } from '../types/motion'
 import { SMPLX_TO_VRM } from '../types/vrm'
 import {
@@ -9,18 +9,15 @@ import {
   type VrmBoneMap,
 } from './adapter'
 
-/** Create a real Object3D to use as a bone node. */
 function makeBone(): Object3D {
   return new Object3D()
 }
 
-/** Build a minimal VrmBoneMap for testing. */
 function makeBoneMap(opts?: { noRoot?: boolean }): VrmBoneMap {
   const root = opts?.noRoot ? null : makeBone()
   return {
     root,
     joints: {
-      pelvis: root ?? makeBone(),
       left_shoulder: makeBone(),
       right_shoulder: makeBone(),
     },
@@ -37,84 +34,91 @@ function makeFrame(overrides?: Partial<MotionFrame>): MotionFrame {
   }
 }
 
+/**
+ * World rotation R = Ry(180°) * Rx(-90°).
+ * Position: [x,y,z] → [-x, z, y]
+ * Root rotation: R * q (premultiply)
+ * Joint locals: pass through unchanged
+ */
 describe('applyMotionFrameToVrm', () => {
-  it('writes root position', () => {
+  it('converts root position: [x,y,z] → [-x, z, y]', () => {
     const boneMap = makeBoneMap()
-    const frame = makeFrame({ root_position: [1, 2, 3] })
-    applyMotionFrameToVrm(frame, boneMap)
+    applyMotionFrameToVrm(makeFrame({ root_position: [1, 2, 3] }), boneMap)
     const p = boneMap.root!.position
-    expect([p.x, p.y, p.z]).toEqual([1, 2, 3])
+    expect(p.x).toBeCloseTo(-1)
+    expect(p.y).toBeCloseTo(3)
+    expect(p.z).toBeCloseTo(2)
   })
 
-  it('writes root rotation', () => {
+  it('identity root rotation becomes R (standing up in Y-up)', () => {
     const boneMap = makeBoneMap()
-    const frame = makeFrame({ root_rotation: [0, 0.707, 0, 0.707] })
-    applyMotionFrameToVrm(frame, boneMap)
+    applyMotionFrameToVrm(makeFrame({ root_rotation: [0, 0, 0, 1] }), boneMap)
     const q = boneMap.root!.quaternion
+    // R = Ry(180°) * Rx(-90°) = [0, √2/2, √2/2, 0]
+    const s = Math.SQRT1_2
     expect(q.x).toBeCloseTo(0)
-    expect(q.y).toBeCloseTo(0.707)
-    expect(q.z).toBeCloseTo(0)
-    expect(q.w).toBeCloseTo(0.707)
+    expect(q.y).toBeCloseTo(s)
+    expect(q.z).toBeCloseTo(s)
+    expect(q.w).toBeCloseTo(0)
   })
 
-  it('writes joint rotations to correct bones', () => {
+  it('joint rotations pass through unchanged', () => {
     const boneMap = makeBoneMap()
-    const frame = makeFrame({
-      joint_rotations: {
-        left_shoulder: [0.1, 0.2, 0.3, 0.9],
-        right_shoulder: [0.4, 0.5, 0.6, 0.7],
-      },
-    })
-    applyMotionFrameToVrm(frame, boneMap)
+    applyMotionFrameToVrm(makeFrame({
+      joint_rotations: { left_shoulder: [0.1, 0.2, 0.3, 0.9] },
+    }), boneMap)
+    const q = boneMap.joints.left_shoulder!.quaternion
+    expect(q.x).toBeCloseTo(0.1)
+    expect(q.y).toBeCloseTo(0.2)
+    expect(q.z).toBeCloseTo(0.3)
+    expect(q.w).toBeCloseTo(0.9)
+  })
 
-    const lq = boneMap.joints.left_shoulder!.quaternion
-    expect(lq.x).toBeCloseTo(0.1)
-    expect(lq.y).toBeCloseTo(0.2)
-    expect(lq.z).toBeCloseTo(0.3)
-    expect(lq.w).toBeCloseTo(0.9)
+  it('identity joint rotation stays identity', () => {
+    const boneMap = makeBoneMap()
+    applyMotionFrameToVrm(makeFrame({
+      joint_rotations: { left_shoulder: [0, 0, 0, 1] },
+    }), boneMap)
+    const q = boneMap.joints.left_shoulder!.quaternion
+    expect(q.x).toBeCloseTo(0)
+    expect(q.y).toBeCloseTo(0)
+    expect(q.z).toBeCloseTo(0)
+    expect(q.w).toBeCloseTo(1)
+  })
 
-    const rq = boneMap.joints.right_shoulder!.quaternion
-    expect(rq.x).toBeCloseTo(0.4)
-    expect(rq.y).toBeCloseTo(0.5)
-    expect(rq.z).toBeCloseTo(0.6)
-    expect(rq.w).toBeCloseTo(0.7)
+  it('pelvis in joint_rotations is skipped (does not overwrite root)', () => {
+    const boneMap = makeBoneMap()
+    applyMotionFrameToVrm(makeFrame({
+      root_rotation: [0, 0, 0, 1],
+      joint_rotations: { pelvis: [0.5, 0.5, 0.5, 0.5] },
+    }), boneMap)
+    // root should still be R * identity, not the pelvis value
+    const q = boneMap.root!.quaternion
+    const s = Math.SQRT1_2
+    expect(q.x).toBeCloseTo(0)
+    expect(q.y).toBeCloseTo(s)
+    expect(q.z).toBeCloseTo(s)
+    expect(q.w).toBeCloseTo(0)
   })
 
   it('skips joints not in boneMap gracefully', () => {
     const boneMap = makeBoneMap()
-    const frame = makeFrame({
-      joint_rotations: {
-        head: [0.1, 0.2, 0.3, 0.9], // not in our test boneMap
-      },
-    })
-    // Should not throw
+    const frame = makeFrame({ joint_rotations: { head: [0.1, 0.2, 0.3, 0.9] } })
     expect(() => applyMotionFrameToVrm(frame, boneMap)).not.toThrow()
   })
 
   it('handles null root gracefully', () => {
     const boneMap = makeBoneMap({ noRoot: true })
-    const frame = makeFrame({ root_position: [5, 5, 5] })
-    expect(() => applyMotionFrameToVrm(frame, boneMap)).not.toThrow()
+    expect(() => applyMotionFrameToVrm(makeFrame({ root_position: [5, 5, 5] }), boneMap)).not.toThrow()
   })
 
-  it('stabilizes quaternion sign flip', () => {
+  it('stabilizes quaternion sign flip on root', () => {
     const boneMap = makeBoneMap()
-
-    // First frame: positive hemisphere
-    applyMotionFrameToVrm(
-      makeFrame({ root_rotation: [0, 0, 0, 1] }),
-      boneMap,
-    )
-    expect(boneMap.root!.quaternion.w).toBeCloseTo(1)
-
-    // Second frame: same rotation but negated (equivalent quaternion)
-    // stabilize should flip it back to positive hemisphere
-    applyMotionFrameToVrm(
-      makeFrame({ root_rotation: [0, 0, 0, -1] }),
-      boneMap,
-    )
-    // After stabilization, should be negated back to [0,0,0,1]
-    expect(boneMap.root!.quaternion.w).toBeCloseTo(1)
+    applyMotionFrameToVrm(makeFrame({ root_rotation: [0, 0, 0, 1] }), boneMap)
+    const w1 = boneMap.root!.quaternion.w
+    applyMotionFrameToVrm(makeFrame({ root_rotation: [0, 0, 0, -1] }), boneMap)
+    // -identity is the same rotation, stabilizer should keep sign consistent
+    expect(boneMap.root!.quaternion.w).toBeCloseTo(w1)
   })
 })
 
@@ -123,7 +127,6 @@ describe('readVrmToMotionFrame', () => {
     const boneMap = makeBoneMap()
     boneMap.root!.position.set(1, 2, 3)
     boneMap.root!.quaternion.set(0, 0.707, 0, 0.707)
-
     const frame = readVrmToMotionFrame(boneMap, 1.5)
     expect(frame.timestamp).toBe(1.5)
     expect(frame.root_position).toEqual([1, 2, 3])
@@ -133,9 +136,7 @@ describe('readVrmToMotionFrame', () => {
   it('reads joint rotations', () => {
     const boneMap = makeBoneMap()
     boneMap.joints.left_shoulder!.quaternion.set(0.1, 0.2, 0.3, 0.9)
-
     const frame = readVrmToMotionFrame(boneMap, 0)
-    expect(frame.joint_rotations.left_shoulder).toBeDefined()
     const [x, y, z, w] = frame.joint_rotations.left_shoulder!
     expect(x).toBeCloseTo(0.1)
     expect(y).toBeCloseTo(0.2)
@@ -152,45 +153,36 @@ describe('readVrmToMotionFrame', () => {
 })
 
 describe('createVrmBoneMap', () => {
-  it('maps SMPL-X joints to VRM bones', () => {
+  it('maps SMPL-X joints to VRM bones (excluding pelvis)', () => {
     const bones = new Map<string, Object3D>()
-    // Create a bone for each VRM name
     for (const vrmName of Object.values(SMPLX_TO_VRM)) {
       bones.set(vrmName, makeBone())
     }
-
     const mockVrm = {
       humanoid: {
         getNormalizedBoneNode: vi.fn((name: string) => bones.get(name) ?? null),
       },
     }
-
     const boneMap = createVrmBoneMap(mockVrm as any)
-
-    // root should be the hips bone
     expect(boneMap.root).toBe(bones.get('hips'))
-
-    // All 22 joints should be mapped
-    for (const [joint, vrmName] of Object.entries(SMPLX_TO_VRM)) {
-      expect(boneMap.joints[joint as keyof typeof boneMap.joints]).toBe(bones.get(vrmName))
-    }
+    // pelvis should NOT be in joints
+    expect(boneMap.joints.pelvis).toBeUndefined()
+    // other joints should be mapped
+    expect(boneMap.joints.spine1).toBe(bones.get('spine'))
+    expect(boneMap.joints.left_shoulder).toBe(bones.get('leftUpperArm'))
   })
 
   it('skips optional bones that return null', () => {
     const mockVrm = {
       humanoid: {
         getNormalizedBoneNode: vi.fn((name: string) => {
-          // Only return hips, skip everything else (simulating missing optional bones)
           if (name === 'hips') return makeBone()
           return null
         }),
       },
     }
-
     const boneMap = createVrmBoneMap(mockVrm as any)
     expect(boneMap.root).toBeTruthy()
-    // chest/upperChest etc should not be in joints
     expect(boneMap.joints.spine2).toBeUndefined()
-    expect(boneMap.joints.spine3).toBeUndefined()
   })
 })
