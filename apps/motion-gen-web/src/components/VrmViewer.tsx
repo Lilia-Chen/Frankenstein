@@ -3,17 +3,21 @@ import { useControls } from 'leva'
 import { useMemo } from 'react'
 import { SkeletonHelper } from 'three'
 import { useVRM } from '../hooks/use-vrm'
-import { applyMotionFrameToVrm, createVrmBoneMap } from '../pipeline/adapter'
+import { applyMotionFrameToVrm, applyMotionFrameFromDart, createVrmBoneMap } from '../pipeline/adapter'
 import type { MotionPlayer } from '../pipeline/player'
+
+export type BackendType = 'default' | 'dart'
 
 interface VrmViewerProps {
   modelUrl: string
   player: MotionPlayer
+  backend?: BackendType
 }
 
-export default function VrmViewer({ modelUrl, player }: VrmViewerProps) {
+export default function VrmViewer({ modelUrl, player, backend = 'default' }: VrmViewerProps) {
   const vrm = useVRM(modelUrl)
   const boneMap = useMemo(() => createVrmBoneMap(vrm), [vrm])
+  const applyFn = backend === 'dart' ? applyMotionFrameFromDart : applyMotionFrameToVrm
 
   const { showSkeleton, showAxes, axesSize } = useControls('VRM Debug', {
     showSkeleton: false,
@@ -28,7 +32,7 @@ export default function VrmViewer({ modelUrl, player }: VrmViewerProps) {
   useFrame((_, delta) => {
     const frame = player.getFrameAtNow()
     if (frame) {
-      applyMotionFrameToVrm(frame, boneMap)
+      applyFn(frame, boneMap)
     }
     vrm.update(delta)
   })

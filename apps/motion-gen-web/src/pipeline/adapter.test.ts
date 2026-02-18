@@ -4,6 +4,7 @@ import type { MotionFrame } from '../types/motion'
 import { SMPLX_TO_VRM } from '../types/vrm'
 import {
   applyMotionFrameToVrm,
+  applyMotionFrameFromDart,
   createVrmBoneMap,
   readVrmToMotionFrame,
   type VrmBoneMap,
@@ -35,31 +36,27 @@ function makeFrame(overrides?: Partial<MotionFrame>): MotionFrame {
 }
 
 /**
- * World rotation R = Ry(180°) * Rx(-90°).
- * Position: [x,y,z] → [-x, z, y]
- * Root rotation: R * q (premultiply)
- * Joint locals: pass through unchanged
+ * applyMotionFrameToVrm — direct pass-through (no coord conversion).
+ * For backends that already send Y-up data (e.g. motionStream).
  */
-describe('applyMotionFrameToVrm', () => {
-  it('converts root position: [x,y,z] → [-x, z, y]', () => {
+describe('applyMotionFrameToVrm (direct / Y-up)', () => {
+  it('passes root position through unchanged', () => {
     const boneMap = makeBoneMap()
     applyMotionFrameToVrm(makeFrame({ root_position: [1, 2, 3] }), boneMap)
     const p = boneMap.root!.position
-    expect(p.x).toBeCloseTo(-1)
-    expect(p.y).toBeCloseTo(3)
-    expect(p.z).toBeCloseTo(2)
+    expect(p.x).toBeCloseTo(1)
+    expect(p.y).toBeCloseTo(2)
+    expect(p.z).toBeCloseTo(3)
   })
 
-  it('identity root rotation becomes R (standing up in Y-up)', () => {
+  it('identity root rotation stays identity', () => {
     const boneMap = makeBoneMap()
     applyMotionFrameToVrm(makeFrame({ root_rotation: [0, 0, 0, 1] }), boneMap)
     const q = boneMap.root!.quaternion
-    // R = Ry(180°) * Rx(-90°) = [0, √2/2, √2/2, 0]
-    const s = Math.SQRT1_2
     expect(q.x).toBeCloseTo(0)
-    expect(q.y).toBeCloseTo(s)
-    expect(q.z).toBeCloseTo(s)
-    expect(q.w).toBeCloseTo(0)
+    expect(q.y).toBeCloseTo(0)
+    expect(q.z).toBeCloseTo(0)
+    expect(q.w).toBeCloseTo(1)
   })
 
   it('joint rotations pass through unchanged', () => {
@@ -74,37 +71,9 @@ describe('applyMotionFrameToVrm', () => {
     expect(q.w).toBeCloseTo(0.9)
   })
 
-  it('identity joint rotation stays identity', () => {
-    const boneMap = makeBoneMap()
-    applyMotionFrameToVrm(makeFrame({
-      joint_rotations: { left_shoulder: [0, 0, 0, 1] },
-    }), boneMap)
-    const q = boneMap.joints.left_shoulder!.quaternion
-    expect(q.x).toBeCloseTo(0)
-    expect(q.y).toBeCloseTo(0)
-    expect(q.z).toBeCloseTo(0)
-    expect(q.w).toBeCloseTo(1)
-  })
-
-  it('pelvis in joint_rotations is skipped (does not overwrite root)', () => {
-    const boneMap = makeBoneMap()
-    applyMotionFrameToVrm(makeFrame({
-      root_rotation: [0, 0, 0, 1],
-      joint_rotations: { pelvis: [0.5, 0.5, 0.5, 0.5] },
-    }), boneMap)
-    // root should still be R * identity, not the pelvis value
-    const q = boneMap.root!.quaternion
-    const s = Math.SQRT1_2
-    expect(q.x).toBeCloseTo(0)
-    expect(q.y).toBeCloseTo(s)
-    expect(q.z).toBeCloseTo(s)
-    expect(q.w).toBeCloseTo(0)
-  })
-
   it('skips joints not in boneMap gracefully', () => {
     const boneMap = makeBoneMap()
-    const frame = makeFrame({ joint_rotations: { head: [0.1, 0.2, 0.3, 0.9] } })
-    expect(() => applyMotionFrameToVrm(frame, boneMap)).not.toThrow()
+    expect(() => applyMotionFrameToVrm(makeFrame({ joint_rotations: { head: [0.1, 0.2, 0.3, 0.9] } }), boneMap)).not.toThrow()
   })
 
   it('handles null root gracefully', () => {
@@ -117,7 +86,72 @@ describe('applyMotionFrameToVrm', () => {
     applyMotionFrameToVrm(makeFrame({ root_rotation: [0, 0, 0, 1] }), boneMap)
     const w1 = boneMap.root!.quaternion.w
     applyMotionFrameToVrm(makeFrame({ root_rotation: [0, 0, 0, -1] }), boneMap)
-    // -identity is the same rotation, stabilizer should keep sign consistent
+    expect(boneMap.root!.quaternion.w).toBeCloseTo(w1)
+  })
+})
+
+/**
+ * applyMotionFrameFromDart — DART backend Z-up → Y-up conversion.
+ * R = Ry(180°) * Rx(-90°). Position: [x,y,z] → [-x, z, y].
+ */
+describe('applyMotionFrameFromDart (DART / Z-up)', () => {
+  it('converts root position: [x,y,z] → [-x, z, y]', () => {
+    const boneMap = makeBoneMap()
+    applyMotionFrameFromDart(makeFrame({ root_position: [1, 2, 3] }), boneMap)
+    const p = boneMap.root!.position
+    expect(p.x).toBeCloseTo(-1)
+    expect(p.y).toBeCloseTo(3)
+    expect(p.z).toBeCloseTo(2)
+  })
+
+  it('identity root rotation becomes R (standing up in Y-up)', () => {
+    const boneMap = makeBoneMap()
+    applyMotionFrameFromDart(makeFrame({ root_rotation: [0, 0, 0, 1] }), boneMap)
+    const q = boneMap.root!.quaternion
+    // R = Ry(180°) * Rx(-90°) = [0, √2/2, √2/2, 0]
+    const s = Math.SQRT1_2
+    expect(q.x).toBeCloseTo(0)
+    expect(q.y).toBeCloseTo(s)
+    expect(q.z).toBeCloseTo(s)
+    expect(q.w).toBeCloseTo(0)
+  })
+
+  it('joint rotations pass through unchanged', () => {
+    const boneMap = makeBoneMap()
+    applyMotionFrameFromDart(makeFrame({
+      joint_rotations: { left_shoulder: [0.1, 0.2, 0.3, 0.9] },
+    }), boneMap)
+    const q = boneMap.joints.left_shoulder!.quaternion
+    expect(q.x).toBeCloseTo(0.1)
+    expect(q.y).toBeCloseTo(0.2)
+    expect(q.z).toBeCloseTo(0.3)
+    expect(q.w).toBeCloseTo(0.9)
+  })
+
+  it('pelvis in joint_rotations is skipped (does not overwrite root)', () => {
+    const boneMap = makeBoneMap()
+    applyMotionFrameFromDart(makeFrame({
+      root_rotation: [0, 0, 0, 1],
+      joint_rotations: { pelvis: [0.5, 0.5, 0.5, 0.5] },
+    }), boneMap)
+    const q = boneMap.root!.quaternion
+    const s = Math.SQRT1_2
+    expect(q.x).toBeCloseTo(0)
+    expect(q.y).toBeCloseTo(s)
+    expect(q.z).toBeCloseTo(s)
+    expect(q.w).toBeCloseTo(0)
+  })
+
+  it('handles null root gracefully', () => {
+    const boneMap = makeBoneMap({ noRoot: true })
+    expect(() => applyMotionFrameFromDart(makeFrame({ root_position: [5, 5, 5] }), boneMap)).not.toThrow()
+  })
+
+  it('stabilizes quaternion sign flip on root', () => {
+    const boneMap = makeBoneMap()
+    applyMotionFrameFromDart(makeFrame({ root_rotation: [0, 0, 0, 1] }), boneMap)
+    const w1 = boneMap.root!.quaternion.w
+    applyMotionFrameFromDart(makeFrame({ root_rotation: [0, 0, 0, -1] }), boneMap)
     expect(boneMap.root!.quaternion.w).toBeCloseTo(w1)
   })
 })

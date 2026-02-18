@@ -48,8 +48,32 @@ function stabilize(node: Object3D, x: number, y: number, z: number, w: number): 
 }
 
 /**
- * World-space rotation fix: Rx(-90°) then Ry(180°).
- *
+ * Apply a MotionFrame to VRM skeleton (direct, no coordinate conversion).
+ * Use this when the backend already sends Y-up data (e.g. motionStream).
+ */
+export function applyMotionFrameToVrm(frame: MotionFrame, boneMap: VrmBoneMap): void {
+  if (boneMap.root) {
+    const [px, py, pz] = frame.root_position
+    boneMap.root.position.set(px, py, pz)
+
+    const [rx, ry, rz, rw] = frame.root_rotation
+    const sq = stabilize(boneMap.root, rx, ry, rz, rw)
+    boneMap.root.quaternion.copy(sq)
+  }
+
+  for (const [joint, quat] of Object.entries(frame.joint_rotations)) {
+    if (joint === 'pelvis') continue
+    const node = boneMap.joints[joint as JointName]
+    if (!node || !quat) continue
+
+    const [jx, jy, jz, jw] = quat as QuaternionTuple
+    const sq = stabilize(node, jx, jy, jz, jw)
+    node.quaternion.copy(sq)
+  }
+}
+
+/**
+ * World-space rotation fix for DART backend (Z-up → Y-up):
  * R = Ry(180°) * Rx(-90°)  (quaternion: [0, √2/2, √2/2, 0])
  *
  * Position:  [x, y, z] → [-x, z, y]
@@ -61,10 +85,10 @@ const _R = new Quaternion()
   .premultiply(new Quaternion().setFromEuler(new Euler(0, Math.PI, 0, 'XYZ')))
 
 /**
- * Apply a MotionFrame to VRM skeleton.
+ * Apply a MotionFrame to VRM skeleton with DART Z-up → Y-up conversion.
+ * Use this when the backend is DART (sends Z-up / SMPL-X native data).
  */
-export function applyMotionFrameToVrm(frame: MotionFrame, boneMap: VrmBoneMap): void {
-  // Root: apply world rotation R
+export function applyMotionFrameFromDart(frame: MotionFrame, boneMap: VrmBoneMap): void {
   if (boneMap.root) {
     const [px, py, pz] = frame.root_position
     boneMap.root.position.set(-px, pz, py)
@@ -76,7 +100,6 @@ export function applyMotionFrameToVrm(frame: MotionFrame, boneMap: VrmBoneMap): 
     boneMap.root.quaternion.copy(sq)
   }
 
-  // Joints: pass through unchanged (pelvis excluded from map)
   for (const [joint, quat] of Object.entries(frame.joint_rotations)) {
     if (joint === 'pelvis') continue
     const node = boneMap.joints[joint as JointName]
