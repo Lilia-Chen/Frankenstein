@@ -39,11 +39,15 @@ const _prev = new Map<Object3D, Quaternion>()
  */
 function stabilize(node: Object3D, x: number, y: number, z: number, w: number): Quaternion {
   _q.set(x, y, z, w)
-  const prev = _prev.get(node)
-  if (prev && prev.dot(_q) < 0) {
+  let prev = _prev.get(node)
+  if (!prev) {
+    prev = new Quaternion()
+    _prev.set(node, prev)
+  }
+  if (prev.dot(_q) < 0) {
     _q.set(-x, -y, -z, -w)
   }
-  _prev.set(node, _q.clone())
+  prev.copy(_q)
   return _q
 }
 
@@ -83,6 +87,8 @@ export function applyMotionFrameToVrm(frame: MotionFrame, boneMap: VrmBoneMap): 
 const _R = new Quaternion()
   .setFromEuler(new Euler(-Math.PI / 2, 0, 0, 'XYZ'))
   .premultiply(new Quaternion().setFromEuler(new Euler(0, Math.PI, 0, 'XYZ')))
+
+const _R_conj = _R.clone().conjugate()
 
 /**
  * Apply a MotionFrame to VRM skeleton with DART Z-up → Y-up conversion.
@@ -131,5 +137,25 @@ export function readVrmToMotionFrame(boneMap: VrmBoneMap, timestamp: number): Mo
     root_position: rootPos ? [rootPos.x, rootPos.y, rootPos.z] : [0, 0, 0],
     root_rotation: rootRot ? [rootRot.x, rootRot.y, rootRot.z, rootRot.w] : [0, 0, 0, 1],
     joint_rotations,
+  }
+}
+
+/**
+ * Read current VRM skeleton state into a MotionFrame in DART space (Y-up → Z-up).
+ * Inverse of applyMotionFrameFromDart. Since R is self-inverse (R²=I),
+ * the transform is identical: position [-x,z,y], root rotation R*q.
+ * Joint rotations are invariant under world rotation.
+ */
+export function readVrmToMotionFrameForDart(boneMap: VrmBoneMap, timestamp: number): MotionFrame {
+  const frame = readVrmToMotionFrame(boneMap, timestamp)
+
+  const [px, py, pz] = frame.root_position
+  const [rx, ry, rz, rw] = frame.root_rotation
+  _r.set(rx, ry, rz, rw).premultiply(_R_conj)
+
+  return {
+    ...frame,
+    root_position: [-px, pz, py],
+    root_rotation: [_r.x, _r.y, _r.z, _r.w],
   }
 }

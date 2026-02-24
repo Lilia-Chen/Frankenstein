@@ -122,4 +122,9 @@ export interface HandshakeMessage {
   capabilities: GeneratorCapabilities
 }
 
+export interface StateUpdateMessage {
+  type: 'state_update'
+  frame: MotionFrame
+}
+
 export type ServerMessage = FrameMessage | DoneMessage | ErrorMessage | HandshakeMessage

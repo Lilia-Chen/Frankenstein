@@ -15,7 +15,7 @@ export default function App() {
     <>
       <Scene>
         <Suspense>
-          <VrmViewer modelUrl={MODEL_URL} player={player} />
+          <VrmViewer modelUrl={MODEL_URL} player={player} backend="dart" onStateUpdate={actions.sendStateUpdate} />
         </Suspense>
       </Scene>
       <ControlPanel state={state} actions={actions} />

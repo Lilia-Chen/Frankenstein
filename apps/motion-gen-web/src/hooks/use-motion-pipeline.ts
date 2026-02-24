@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react'
 import { MotionPlayer } from '../pipeline/player'
 import { MocapSource } from '../pipeline/sources/mocap-source'
 import { WebSocketSource, type WsStatus } from '../pipeline/sources/websocket-source'
-import type { ConditioningSpec, GeneratorCapabilities } from '../types/motion'
+import type { ConditioningSpec, GeneratorCapabilities, MotionFrame } from '../types/motion'
 
 export type SourceMode = 'websocket' | 'mocap'
 
@@ -23,6 +23,8 @@ export interface MotionPipelineActions {
   cancel: () => void
   playMocap: (url: string) => void
   stopMocap: () => void
+  sendStateUpdate: (frame: MotionFrame) => void
+  setAutoIdle: (enabled: boolean, conditioning?: ConditioningSpec) => void
 }
 
 export function useMotionPipeline() {
@@ -30,6 +32,9 @@ export function useMotionPipeline() {
   const wsSourceRef = useRef<WebSocketSource | null>(null)
   const mocapSourceRef = useRef<MocapSource | null>(null)
   const requestIdRef = useRef<string | null>(null)
+  const autoIdleRef = useRef(false)
+  const autoIdleConditioningRef = useRef<ConditioningSpec>({ text: 'idle' })
+  const pendingResetRef = useRef(false)
 
   const [state, setState] = useState<MotionPipelineState>({
     mode: 'websocket',
@@ -51,8 +56,32 @@ export function useMotionPipeline() {
       onStatusChange: (wsStatus) => patch({ wsStatus }),
     })
     source.start({
-      onFrame: (frame) => playerRef.current.pushFrame(frame),
-      onDone: (doneInfo) => patch({ doneInfo, isGenerating: false }),
+      onFrame: (frame, id) => {
+        if (id && id !== requestIdRef.current) return
+        if (pendingResetRef.current) {
+          const from = playerRef.current.getFrameAtNow()
+          playerRef.current.reset()
+          playerRef.current.start()
+          if (from) playerRef.current.startBlend(from)
+          pendingResetRef.current = false
+        }
+        playerRef.current.pushFrame(frame)
+      },
+      onDone: (doneInfo, doneId) => {
+        if (doneId && doneId !== requestIdRef.current) return
+        patch({ doneInfo, isGenerating: false })
+        if (autoIdleRef.current && wsSourceRef.current?.isConnected) {
+          const ws = wsSourceRef.current
+          patch({ error: null, doneInfo: null, isGenerating: true })
+          const currentFrame = playerRef.current.getFrameAtNow() ?? undefined
+          playerRef.current.reset()
+          playerRef.current.start()
+          if (currentFrame) playerRef.current.startBlend(currentFrame)
+          pendingResetRef.current = false
+          const id = ws.sendGenerate(autoIdleConditioningRef.current, { current_frame: currentFrame })
+          requestIdRef.current = id
+        }
+      },
       onError: (error) => patch({ error, isGenerating: false }),
       onCapabilities: (capabilities) => patch({ capabilities }),
     })
@@ -72,10 +101,13 @@ export function useMotionPipeline() {
       patch({ error: 'WebSocket is not connected.' })
       return
     }
+    // cancel previous request to stop stale frames
+    const prevId = requestIdRef.current
+    if (prevId) ws.sendCancel(prevId)
+
     patch({ error: null, doneInfo: null, isGenerating: true })
-    playerRef.current.reset()
-    playerRef.current.start()
     const currentFrame = playerRef.current.getFrameAtNow() ?? undefined
+    pendingResetRef.current = true
     const id = ws.sendGenerate(conditioning, { ...opts, current_frame: currentFrame })
     requestIdRef.current = id
   }, [patch])
@@ -112,6 +144,15 @@ export function useMotionPipeline() {
     patch({ mode })
   }, [patch])
 
+  const sendStateUpdate = useCallback((frame: MotionFrame) => {
+    wsSourceRef.current?.sendStateUpdate(frame)
+  }, [])
+
+  const setAutoIdle = useCallback((enabled: boolean, conditioning?: ConditioningSpec) => {
+    autoIdleRef.current = enabled
+    if (conditioning) autoIdleConditioningRef.current = conditioning
+  }, [])
+
   const actions: MotionPipelineActions = {
     setMode,
     connectWs,
@@ -120,6 +161,8 @@ export function useMotionPipeline() {
     cancel,
     playMocap,
     stopMocap,
+    sendStateUpdate,
+    setAutoIdle,
   }
 
   return { player: playerRef.current, state, actions }

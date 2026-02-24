@@ -6,7 +6,9 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
 export function useVRM(url: string): VRM {
   const gltf = useLoader(GLTFLoader, url, (loader) => {
-    loader.register((parser) => new VRMLoaderPlugin(parser))
+    loader.register((parser) => new VRMLoaderPlugin(parser, {
+      springBonePlugin: { name: 'noop', afterRoot: async () => {} } as any,
+    }))
   })
 
   const vrm = useMemo(() => {

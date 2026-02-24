@@ -4,6 +4,7 @@ import type {
   GenerateRequest,
   MotionFrame,
   ServerMessage,
+  StateUpdateMessage,
 } from '../../types/motion'
 import type { MotionSource, MotionSourceCallbacks } from './types'
 
@@ -15,9 +16,10 @@ export interface WebSocketSourceOptions {
 }
 
 export class WebSocketSource implements MotionSource {
-  private socket: WebSocket | null = null
+  private worker: Worker | null = null
   private callbacks: MotionSourceCallbacks | null = null
   private readonly options: WebSocketSourceOptions
+  private status: WsStatus = 'idle'
 
   constructor(options: WebSocketSourceOptions) {
     this.options = options
@@ -34,6 +36,8 @@ export class WebSocketSource implements MotionSource {
 
   dispose() {
     this.close()
+    this.worker?.terminate()
+    this.worker = null
     this.callbacks = null
   }
 
@@ -43,44 +47,45 @@ export class WebSocketSource implements MotionSource {
       this.setStatus('error')
       return
     }
-    if (this.socket?.readyState === WebSocket.OPEN) return
+    if (this.status === 'open') return
 
-    this.setStatus('connecting')
-    this.socket = new WebSocket(this.options.url)
+    if (!this.worker) {
+      this.worker = new Worker(new URL('./websocket.worker.ts', import.meta.url), { type: 'module' })
+      this.worker.onmessage = (e) => this.handleWorkerMessage(e.data)
+    }
 
-    this.socket.onopen = () => this.setStatus('open')
-    this.socket.onclose = () => this.setStatus('closed')
-    this.socket.onerror = () => {
-      this.callbacks?.onError('Unable to connect to WebSocket backend.')
-      this.setStatus('error')
-    }
-    this.socket.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data) as ServerMessage
-        switch (msg.type) {
-          case 'frame':
-            this.callbacks?.onFrame(msg.frame)
-            break
-          case 'done':
-            this.callbacks?.onDone(msg.metadata)
-            break
-          case 'error':
-            this.callbacks?.onError(msg.error)
-            break
-          case 'handshake':
-            this.callbacks?.onCapabilities?.(msg.capabilities)
-            break
-        }
-      } catch (err) {
-        this.callbacks?.onError(err instanceof Error ? err.message : 'Invalid message format.')
-      }
-    }
+    this.worker.postMessage({ type: 'connect', url: this.options.url })
   }
 
   close() {
-    if (!this.socket) return
-    this.socket.close()
-    this.socket = null
+    this.worker?.postMessage({ type: 'disconnect' })
+  }
+
+  private handleWorkerMessage(data: { type: 'status'; status: WsStatus } | { type: 'message'; msg: ServerMessage }) {
+    if (data.type === 'status') {
+      this.status = data.status
+      if (data.status === 'error') {
+        this.callbacks?.onError('Unable to connect to WebSocket backend.')
+      }
+      this.setStatus(data.status)
+      return
+    }
+
+    const msg = data.msg
+    switch (msg.type) {
+      case 'frame':
+        this.callbacks?.onFrame(msg.frame, msg.id)
+        break
+      case 'done':
+        this.callbacks?.onDone(msg.metadata, msg.id)
+        break
+      case 'error':
+        this.callbacks?.onError(msg.error)
+        break
+      case 'handshake':
+        this.callbacks?.onCapabilities?.(msg.capabilities)
+        break
+    }
   }
 
   sendGenerate(conditioning: ConditioningSpec, opts?: { duration_seconds?: number; fps?: number; current_frame?: MotionFrame }) {
@@ -98,16 +103,22 @@ export class WebSocketSource implements MotionSource {
     this.send(req)
   }
 
+  sendStateUpdate(frame: MotionFrame) {
+    if (this.status !== 'open') return
+    const msg: StateUpdateMessage = { type: 'state_update', frame }
+    this.worker?.postMessage({ type: 'send', data: JSON.stringify(msg) })
+  }
+
   get isConnected(): boolean {
-    return this.socket?.readyState === WebSocket.OPEN
+    return this.status === 'open'
   }
 
   private send(payload: object) {
-    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+    if (this.status !== 'open') {
       this.callbacks?.onError('WebSocket is not connected.')
       return
     }
-    this.socket.send(JSON.stringify(payload))
+    this.worker?.postMessage({ type: 'send', data: JSON.stringify(payload) })
   }
 
   private setStatus(status: WsStatus) {

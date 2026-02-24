@@ -9,9 +9,11 @@ interface ControlPanelProps {
 export default function ControlPanel({ state, actions }: ControlPanelProps) {
   const [wsUrl, setWsUrl] = useState('ws://localhost:8000/ws/motion')
   const [prompt, setPrompt] = useState('walk forward')
-  const [durationSeconds, setDurationSeconds] = useState('3')
+  const [durationSeconds, setDurationSeconds] = useState('5')
   const [fps, setFps] = useState('30')
   const [mocapUrl, setMocapUrl] = useState('')
+  const [autoIdle, setAutoIdle] = useState(false)
+  const [idlePrompt, setIdlePrompt] = useState('idle')
 
   const handleModeChange = (mode: SourceMode) => {
     actions.setMode(mode)
@@ -69,6 +71,7 @@ export default function ControlPanel({ state, actions }: ControlPanelProps) {
               className="control-panel__input"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
             />
           </div>
           <div className="control-panel__row">
@@ -92,6 +95,26 @@ export default function ControlPanel({ state, actions }: ControlPanelProps) {
             <button className="control-panel__button" onClick={actions.cancel} disabled={!state.isGenerating}>
               Cancel
             </button>
+          </div>
+          <div className="control-panel__row">
+            <input
+              id="auto-idle"
+              type="checkbox"
+              checked={autoIdle}
+              onChange={(e) => {
+                setAutoIdle(e.target.checked)
+                actions.setAutoIdle(e.target.checked, { text: idlePrompt })
+              }}
+            />
+            <label className="control-panel__label" htmlFor="auto-idle">Auto Idle</label>
+            <input
+              className="control-panel__input"
+              value={idlePrompt}
+              onChange={(e) => {
+                setIdlePrompt(e.target.value)
+                actions.setAutoIdle(autoIdle, { text: e.target.value })
+              }}
+            />
           </div>
         </>
       )}
