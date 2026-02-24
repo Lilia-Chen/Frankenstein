@@ -17,7 +17,7 @@ export default function ControlPanel({ state, actions }: ControlPanelProps) {
   const [autoIdle, setAutoIdle] = useState(false)
   const [idlePrompt, setIdlePrompt] = useState('idle')
   const [planInput, setPlanInput] = useState('')
-  const [llmApiKey, setLlmApiKey] = useState('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')
+  const [llmApiKey, setLlmApiKey] = useState('')
   const [llmBaseUrl, setLlmBaseUrl] = useState('https://openrouter.ai/api/v1/')
   const [llmModel, setLlmModel] = useState('gpt-4o-mini')
   const [isPlanning, setIsPlanning] = useState(false)
