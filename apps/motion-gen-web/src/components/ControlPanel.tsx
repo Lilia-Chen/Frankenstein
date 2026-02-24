@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import type { MotionPipelineActions, MotionPipelineState, SourceMode } from '../hooks/use-motion-pipeline'
+import { planFromText } from '../pipeline/layer1/planner'
+import type { SkillPlan } from '../types/skill'
 
 interface ControlPanelProps {
   state: MotionPipelineState
@@ -14,6 +16,13 @@ export default function ControlPanel({ state, actions }: ControlPanelProps) {
   const [mocapUrl, setMocapUrl] = useState('')
   const [autoIdle, setAutoIdle] = useState(false)
   const [idlePrompt, setIdlePrompt] = useState('idle')
+  const [planInput, setPlanInput] = useState('')
+  const [llmApiKey, setLlmApiKey] = useState('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')
+  const [llmBaseUrl, setLlmBaseUrl] = useState('https://openrouter.ai/api/v1/')
+  const [llmModel, setLlmModel] = useState('gpt-4o-mini')
+  const [isPlanning, setIsPlanning] = useState(false)
+  const [planError, setPlanError] = useState<string | null>(null)
+  const [lastPlan, setLastPlan] = useState<SkillPlan | null>(null)
 
   const handleModeChange = (mode: SourceMode) => {
     actions.setMode(mode)
@@ -28,6 +37,25 @@ export default function ControlPanel({ state, actions }: ControlPanelProps) {
         fps: fps ? Number(fps) : undefined,
       },
     )
+  }
+
+  const handlePlanAndExecute = async () => {
+    if (!planInput.trim()) return
+    setIsPlanning(true)
+    setPlanError(null)
+    try {
+      const plan = await planFromText(planInput.trim(), {
+        apiKey: llmApiKey,
+        baseURL: llmBaseUrl,
+        model: llmModel,
+      })
+      setLastPlan(plan)
+      actions.executePlan(plan)
+    } catch (e) {
+      setPlanError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setIsPlanning(false)
+    }
   }
 
   return (
@@ -116,6 +144,73 @@ export default function ControlPanel({ state, actions }: ControlPanelProps) {
               }}
             />
           </div>
+          <div className="control-panel__row">
+            <label className="control-panel__label" htmlFor="llm-base-url">LLM URL</label>
+            <input
+              id="llm-base-url"
+              className="control-panel__input"
+              value={llmBaseUrl}
+              onChange={(e) => setLlmBaseUrl(e.target.value)}
+            />
+            <label className="control-panel__label" htmlFor="llm-model">Model</label>
+            <input
+              id="llm-model"
+              className="control-panel__input control-panel__input--small"
+              value={llmModel}
+              onChange={(e) => setLlmModel(e.target.value)}
+            />
+          </div>
+          <div className="control-panel__row">
+            <label className="control-panel__label" htmlFor="llm-api-key">API Key</label>
+            <input
+              id="llm-api-key"
+              className="control-panel__input"
+              type="password"
+              value={llmApiKey}
+              onChange={(e) => setLlmApiKey(e.target.value)}
+            />
+          </div>
+          <div className="control-panel__row">
+            <label className="control-panel__label" htmlFor="plan-input">Plan</label>
+            <input
+              id="plan-input"
+              className="control-panel__input"
+              placeholder="walk forward then wave then idle"
+              value={planInput}
+              onChange={(e) => setPlanInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handlePlanAndExecute()}
+            />
+            <button
+              className="control-panel__button control-panel__button--primary"
+              onClick={handlePlanAndExecute}
+              disabled={isPlanning || !planInput.trim()}
+            >
+              {isPlanning ? 'Planning…' : 'Plan & Execute'}
+            </button>
+            <button
+              className="control-panel__button"
+              onClick={actions.cancelPlan}
+              disabled={!state.activePlan}
+            >
+              Cancel Plan
+            </button>
+          </div>
+          {(lastPlan || state.activePlan) && (
+            <div className="control-panel__row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+              {(state.activePlan ?? lastPlan)!.nodes.map((node) => {
+                const isActive = state.activeNodeId === node.id
+                const isDone = state.activePlan
+                  ? !isActive && state.activePlan.nodes.indexOf(node) < state.activePlan.nodes.findIndex((n) => n.id === state.activeNodeId)
+                  : true
+                return (
+                  <span key={node.id} style={{ opacity: isDone ? 0.4 : 1, fontWeight: isActive ? 'bold' : 'normal' }}>
+                    {isActive ? '▶ ' : isDone ? '✓ ' : '○ '}{node.skill}: {node.params.text}
+                  </span>
+                )
+              })}
+            </div>
+          )}
+          {planError && <div className="control-panel__row"><span className="control-panel__error">{planError}</span></div>}
         </>
       )}
 

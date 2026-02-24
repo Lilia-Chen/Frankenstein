@@ -1,8 +1,10 @@
 import { useCallback, useRef, useState } from 'react'
+import { SkillScheduler } from '../pipeline/layer2/scheduler'
 import { MotionPlayer } from '../pipeline/player'
 import { MocapSource } from '../pipeline/sources/mocap-source'
 import { WebSocketSource, type WsStatus } from '../pipeline/sources/websocket-source'
 import type { ConditioningSpec, GeneratorCapabilities, MotionFrame } from '../types/motion'
+import type { SkillPlan } from '../types/skill'
 
 export type SourceMode = 'websocket' | 'mocap'
 
@@ -13,6 +15,8 @@ export interface MotionPipelineState {
   error: string | null
   doneInfo: { total_frames: number; generation_time_ms: number; model_name: string } | null
   capabilities: GeneratorCapabilities | null
+  activePlan: SkillPlan | null
+  activeNodeId: string | null
 }
 
 export interface MotionPipelineActions {
@@ -25,6 +29,8 @@ export interface MotionPipelineActions {
   stopMocap: () => void
   sendStateUpdate: (frame: MotionFrame) => void
   setAutoIdle: (enabled: boolean, conditioning?: ConditioningSpec) => void
+  executePlan: (plan: SkillPlan) => void
+  cancelPlan: () => void
 }
 
 export function useMotionPipeline() {
@@ -35,6 +41,7 @@ export function useMotionPipeline() {
   const autoIdleRef = useRef(false)
   const autoIdleConditioningRef = useRef<ConditioningSpec>({ text: 'idle' })
   const pendingResetRef = useRef(false)
+  const schedulerRef = useRef<SkillScheduler | null>(null)
 
   const [state, setState] = useState<MotionPipelineState>({
     mode: 'websocket',
@@ -43,6 +50,8 @@ export function useMotionPipeline() {
     error: null,
     doneInfo: null,
     capabilities: null,
+    activePlan: null,
+    activeNodeId: null,
   })
 
   const patch = useCallback((partial: Partial<MotionPipelineState>) => {
@@ -68,6 +77,11 @@ export function useMotionPipeline() {
         playerRef.current.pushFrame(frame)
       },
       onDone: (doneInfo, doneId) => {
+        // let scheduler handle it if active
+        if (schedulerRef.current?.handleDone(doneId)) {
+          patch({ isGenerating: false })
+          return
+        }
         if (doneId && doneId !== requestIdRef.current) return
         patch({ doneInfo, isGenerating: false })
         if (autoIdleRef.current && wsSourceRef.current?.isConnected) {
@@ -153,6 +167,55 @@ export function useMotionPipeline() {
     if (conditioning) autoIdleConditioningRef.current = conditioning
   }, [])
 
+  const executePlan = useCallback((plan: SkillPlan) => {
+    const ws = wsSourceRef.current
+    if (!ws?.isConnected) {
+      patch({ error: 'WebSocket is not connected.' })
+      return
+    }
+    schedulerRef.current?.cancel()
+    const scheduler = new SkillScheduler(ws, playerRef.current)
+    schedulerRef.current = scheduler
+    patch({ activePlan: plan, activeNodeId: null, isGenerating: true, error: null, doneInfo: null })
+    scheduler.start(plan, {
+      onNodeStart: (node) => patch({ activeNodeId: node.id }),
+      onNodeDone: () => {},
+      onRequestId: (id) => {
+        requestIdRef.current = id
+        pendingResetRef.current = true
+      },
+      onPlanDone: (idleNode) => {
+        schedulerRef.current = null
+        patch({ activePlan: null, activeNodeId: null, isGenerating: false })
+        if (idleNode && wsSourceRef.current?.isConnected) {
+          const idleText = idleNode.params.text || 'idle'
+          autoIdleConditioningRef.current = { text: idleText }
+          autoIdleRef.current = true
+          // kick off first idle generation
+          const ws = wsSourceRef.current
+          patch({ isGenerating: true })
+          const currentFrame = playerRef.current.getFrameAtNow() ?? undefined
+          playerRef.current.reset()
+          playerRef.current.start()
+          if (currentFrame) playerRef.current.startBlend(currentFrame)
+          pendingResetRef.current = false
+          const id = ws.sendGenerate({ text: idleText }, { current_frame: currentFrame })
+          requestIdRef.current = id
+        }
+      },
+      onError: (msg) => {
+        schedulerRef.current = null
+        patch({ activePlan: null, activeNodeId: null, isGenerating: false, error: msg })
+      },
+    })
+  }, [patch])
+
+  const cancelPlan = useCallback(() => {
+    schedulerRef.current?.cancel()
+    schedulerRef.current = null
+    patch({ activePlan: null, activeNodeId: null, isGenerating: false })
+  }, [patch])
+
   const actions: MotionPipelineActions = {
     setMode,
     connectWs,
@@ -163,6 +226,8 @@ export function useMotionPipeline() {
     stopMocap,
     sendStateUpdate,
     setAutoIdle,
+    executePlan,
+    cancelPlan,
   }
 
   return { player: playerRef.current, state, actions }
